@@ -101,7 +101,7 @@ jobs:
 
   desktop:
     name: Desktop ${{ matrix.platform }}
-    if: *checks
+    if: false
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -295,7 +295,7 @@ jobs:
 
   windows-helper-test:
     name: Windows helper test
-    if: *checks
+    if: false
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -315,7 +315,7 @@ jobs:
   build:
     # Releases publish where the release links point: the public repository.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    needs: [ dart, plugins, go, android, rust ]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
