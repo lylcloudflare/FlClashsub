@@ -403,6 +403,12 @@ jobs:
         if: matrix.platform == 'macos' && matrix.arch == 'amd64'
         run: plutil -replace FLTEnableImpeller -bool NO macos/Runner/Info.plist
 
+      - name: Inject branding secrets
+        env:
+          BRANDING_SUB_URLS: ${{ secrets.BRANDING_SUB_URLS }}
+          BRANDING_UNLOCK_CODE: ${{ secrets.BRANDING_UNLOCK_CODE }}
+        run: python3 .github/scripts/inject_branding.py
+
       - name: Setup
         env:
           ANDROID_NDK_HOME: ${{ steps.build-ndk.outputs.ndk-path }}
