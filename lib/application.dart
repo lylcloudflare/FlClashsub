@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:fl_clash/common/branding.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/window.dart';
 import 'package:fl_clash/bootstrap.dart';
@@ -97,6 +98,7 @@ class ApplicationState extends ConsumerState<Application> {
       } else {
         exit(0);
       }
+      unawaited(addBrandingProfilesIfMissing(ref));
       _autoUpdateProfilesTask();
       _initLink();
       if (!safeModeBuild) {
