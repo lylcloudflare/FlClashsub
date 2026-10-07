@@ -3,15 +3,21 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-const brandingSubscriptionUrl = '这里换成你的订阅链接';
+const brandingSubscriptionUrls = <String>[
+  'https://sossub.20030413.xyz/profiles/cf',
+  'https://sossub.20030413.xyz/profiles/lr',
+  'https://panel.0611520.xyz:8000/sub/bHI5OTksMTc5MTM0NjQ2MgSZeAd2Cgga',
+];
 const brandingUnlockCode = 'suks';
 
-Future<void> addBrandingProfileIfEmpty(WidgetRef ref) async {
-  if (!brandingSubscriptionUrl.startsWith('http')) return;
-  if (ref.read(profilesProvider).isNotEmpty) return;
-  await ref
-      .read(profilesActionProvider.notifier)
-      .addProfileFormURL(brandingSubscriptionUrl);
+Future<void> addBrandingProfilesIfMissing(WidgetRef ref) async {
+  for (final url in brandingSubscriptionUrls) {
+    if (!url.startsWith('http')) continue;
+    if (ref.read(profilesProvider).any((profile) => profile.url == url)) {
+      continue;
+    }
+    await ref.read(profilesActionProvider.notifier).addProfileFormURL(url);
+  }
 }
 
 Future<bool> askBrandingUnlockCode() async {
