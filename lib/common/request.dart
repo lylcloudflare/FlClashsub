@@ -71,7 +71,7 @@ class Request {
   Future<Map<String, dynamic>?> checkForUpdate() async {
     try {
       final response = await dio.get(
-        'https://api.github.com/repos/$repository/releases/latest',
+        'https://api.github.com/repos/$updateRepository/releases/latest',
         options: Options(responseType: ResponseType.json),
       );
       if (response.statusCode != 200) return null;
