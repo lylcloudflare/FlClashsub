@@ -165,10 +165,15 @@ class _AboutHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          Text(
-            appName,
-            style: textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+          GestureDetector(
+            onLongPress: () async {
+              if (await askBrandingUnlockCode()) showAddProfilePage();
+            },
+            child: Text(
+              appName,
+              style: textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(height: 10),
