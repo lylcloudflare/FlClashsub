@@ -4,9 +4,9 @@ import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const brandingSubscriptionUrls = <String>[
-  'https://sossub.20030413.xyz/profiles/cf',
-  'https://sossub.20030413.xyz/profiles/lr',
-  'https://panel.0611520.xyz:8000/sub/bHI5OTksMTc5MTM0NjQ2MgSZeAd2Cgga',
+  ' ',
+  '',
+  '',
 ];
 const brandingUnlockCode = 'suks';
 
