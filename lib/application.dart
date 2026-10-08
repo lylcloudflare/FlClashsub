@@ -109,6 +109,7 @@ class ApplicationState extends ConsumerState<Application> {
 
   void _initLink() {
     linkManager.initAppLinksListen((url) async {
+      if (!await askBrandingUnlockCode()) return;
       unawaited(window?.show());
       final message = currentAppLocalizations.createProfileFromUrlTip(url);
       final parts = message.split(url);
