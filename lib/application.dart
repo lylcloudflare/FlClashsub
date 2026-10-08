@@ -98,7 +98,7 @@ class ApplicationState extends ConsumerState<Application> {
       } else {
         exit(0);
       }
-      unawaited(addBrandingProfilesIfMissing(ref));
+      unawaited(setupBrandingProfiles(ref));
       _autoUpdateProfilesTask();
       _initLink();
       if (!safeModeBuild) {

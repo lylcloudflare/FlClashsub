@@ -407,6 +407,7 @@ jobs:
         env:
           BRANDING_SUB_URLS: ${{ secrets.BRANDING_SUB_URLS }}
           BRANDING_UNLOCK_CODE: ${{ secrets.BRANDING_UNLOCK_CODE }}
+          BRANDING_SUB_BASE: ${{ secrets.BRANDING_SUB_BASE }}
         run: python3 .github/scripts/inject_branding.py
 
       - name: Setup

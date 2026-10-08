@@ -47,3 +47,33 @@ Future<bool> askBrandingUnlockCode() async {
   );
   return input?.trim().toLowerCase() == brandingSecretCode.toLowerCase();
 }
+
+String? brandingSubscriptionUrl(String? input, String base) {
+  final code = (input ?? '').replaceAll(RegExp(r'\s'), '');
+  if (code.isEmpty || base.isEmpty) return null;
+  final prefix = base.endsWith('/') ? base : '$base/';
+  if (code.startsWith('http')) {
+    return code.startsWith(prefix) ? code : null;
+  }
+  return '$prefix$code';
+}
+
+Future<void> promptSubscriptionCodeIfNeeded(WidgetRef ref) async {
+  if (brandingSecretSubBase.isEmpty) return;
+  if (ref.read(profilesProvider).isNotEmpty) return;
+  final input = await dialogs.showCommonDialog<String>(
+    child: InputDialog(
+      title: currentAppLocalizations.subscriptionInfo,
+      value: '',
+      labelText: currentAppLocalizations.url,
+    ),
+  );
+  final url = brandingSubscriptionUrl(input, brandingSecretSubBase);
+  if (url == null) return;
+  await ref.read(profilesActionProvider.notifier).addProfileFormURL(url);
+}
+
+Future<void> setupBrandingProfiles(WidgetRef ref) async {
+  await addBrandingProfilesIfMissing(ref);
+  await promptSubscriptionCodeIfNeeded(ref);
+}
