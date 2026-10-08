@@ -10,7 +10,11 @@ Future<void> addBrandingProfilesIfMissing(WidgetRef ref) async {
     if (ref.read(profilesProvider).any((profile) => profile.url == url)) {
       continue;
     }
-    await ref.read(profilesActionProvider.notifier).addProfileFormURL(url);
+    try {
+      await ref.read(profilesActionProvider.notifier).addProfileFormURL(url);
+    } catch (e) {
+      commonPrint.log('addBrandingProfile failed: $e');
+    }
   }
 }
 
