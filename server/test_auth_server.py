@@ -5,6 +5,10 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+import contextlib
+import io
+import sqlite3
+from unittest import mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import auth_server
@@ -130,7 +134,15 @@ class AuthServerTest(unittest.TestCase):
         return self.post(
             "/api/register", {"username": name, "password": pw, "invite": code}
         )
-
+        
+    def cli(self, *argv):
+        """Run the flauth CLI against this test's database."""
+        env = {"AUTH_DB": self.cfg["db_path"]}
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, env), contextlib.redirect_stdout(out):
+            auth_server.main(list(argv))
+        return out.getvalue().strip()
+    
     def test_register_then_login(self):
         status, res = self.register(self.invite())
         self.assertEqual(status, 200)
@@ -248,6 +260,32 @@ class AuthServerTest(unittest.TestCase):
         self.post("/api/login", {"username": "alice", "password": "password123"})
         self.assertEqual(self.fake.token_calls, 1)
 
+    def test_cli_custom_invite_code(self):
+        printed = self.cli(
+            "invite-create", "--code", "xiao-wang 2026",
+            "--uses", "1", "--gb", "20", "--days", "7",
+        )
+        self.assertEqual(printed, "XIAOWANG2026")
+        # Any case / separators work when registering.
+        status, _ = self.register("xiaowang-2026")
+        self.assertEqual(status, 200)
+        self.assertEqual(self.fake.created[0]["data_limit"], 20 * 1024**3)
+        # Single use: the second registration is rejected.
+        status, res = self.register("XIAOWANG2026", name="bob")
+        self.assertEqual((status, res["error"]), (403, "invalid_invite"))
+
+    def test_cli_duplicate_custom_code_fails(self):
+        self.cli("invite-create", "--code", "SAMECODE88")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.cli("invite-create", "--code", "SAMECODE88")
+
+    def test_cli_random_code_is_still_default(self):
+        printed = self.cli("invite-create", "--count", "2").splitlines()
+        self.assertEqual(len(printed), 2)
+        self.assertNotEqual(printed[0], printed[1])
+        for line in printed:
+            self.assertRegex(line, r"^[A-Z2-9]{5}-[A-Z2-9]{5}$")
+            
     def test_password_hash_roundtrip(self):
         stored = auth_server.hash_password("hello-world")
         self.assertTrue(auth_server.verify_password("hello-world", stored))
