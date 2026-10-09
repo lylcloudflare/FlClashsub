@@ -488,6 +488,8 @@ def cmd_serve(cfg, args):
 
 
 def cmd_invite_create(cfg, args):
+    if args.code and args.count != 1:
+        sys.exit("--code can only be used with --count 1")
     db = open_db(cfg["db_path"])
     expires_at = int(time.time() + args.valid_days * 86400) if args.valid_days else 0
     for _ in range(args.count):
