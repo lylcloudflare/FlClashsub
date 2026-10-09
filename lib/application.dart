@@ -14,6 +14,7 @@ import 'package:fl_clash/manager/manager.dart';
 import 'package:fl_clash/plugins/app.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/views/branding_login.dart';
 import 'package:fl_clash/widgets/focus.dart';
 import 'package:fl_clash/widgets/keyboard_inset_hold.dart';
 import 'package:material_ui/material_ui.dart';
@@ -98,7 +99,7 @@ class ApplicationState extends ConsumerState<Application> {
       } else {
         exit(0);
       }
-      unawaited(addBrandingProfilesIfMissing(ref));
+      unawaited(setupBranding(ref));
       _autoUpdateProfilesTask();
       _initLink();
       if (!safeModeBuild) {

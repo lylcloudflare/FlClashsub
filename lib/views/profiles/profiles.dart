@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:fl_clash/common/branding_api.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/icons/icons.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/views/branding_login.dart';
 import 'package:fl_clash/views/profiles/overwrite/overwrite.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
@@ -105,6 +107,7 @@ class _ProfilesViewState extends ConsumerState<ProfilesView> {
               label: appLocalizations.nullTip(appLocalizations.profiles),
               description: appLocalizations.nullProfileDesc,
               illustration: NullStatusIllustration.profile,
+              action: brandingLoginEnabled ? const _LoginButton() : null,
             ),
             child: _ProfilesGrid(
               profiles: state.profiles,
@@ -114,6 +117,21 @@ class _ProfilesViewState extends ConsumerState<ProfilesView> {
           ),
         );
       },
+    );
+  }
+}
+
+class _LoginButton extends StatelessWidget {
+  const _LoginButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ElasticButton(
+      child: FilledButton.tonalIcon(
+        onPressed: showBrandingLogin,
+        icon: const GlyphIcon(AppGlyphs.key, fill: 1),
+        label: const Text(brandingLoginLabel),
+      ),
     );
   }
 }

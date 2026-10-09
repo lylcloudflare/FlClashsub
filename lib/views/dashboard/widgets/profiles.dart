@@ -1,9 +1,11 @@
+import 'package:fl_clash/common/branding_api.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/icons/icons.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/views/branding_login.dart';
 import 'package:fl_clash/views/dashboard/widget_metrics.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:material_ui/material_ui.dart';
@@ -27,13 +29,22 @@ class ProfilesCard extends ConsumerWidget {
     final colorScheme = context.colorScheme;
     final textScale = DashboardWidgetMetrics.textScaleOf(context);
     final padding = DashboardWidgetMetrics.paddingOf(context);
+    final VoidCallback? onTap;
+    if (profile != null) {
+      onTap = () => showProfileDetailSheet(context);
+    } else if (brandingLoginEnabled) {
+      onTap = showBrandingLogin;
+    } else {
+      onTap = null;
+    }
+    final emptyText = brandingLoginEnabled
+        ? brandingLoginLabel
+        : appLocalizations.addProfile;
     return SizedBox(
       height: DashboardWidgetMetrics.heightOf(context, 1),
       child: CommonCard(
         radius: DashboardWidgetMetrics.radiusOf(context),
-        onPressed: profile == null
-            ? null
-            : () => showProfileDetailSheet(context),
+        onPressed: onTap,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -87,7 +98,7 @@ class ProfilesCard extends ConsumerWidget {
               alignment: AlignmentDirectional.centerStart,
               child: profile == null
                   ? Text(
-                      appLocalizations.addProfile,
+                      emptyText,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: context.textTheme.bodyMedium?.toLight.adjustSize(
