@@ -121,14 +121,14 @@ class _ProfilesViewState extends ConsumerState<ProfilesView> {
   }
 }
 
-class _LoginButton extends StatelessWidget {
+class _LoginButton extends ConsumerWidget {
   const _LoginButton();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ElasticButton(
       child: FilledButton.tonalIcon(
-        onPressed: showBrandingLogin,
+        onPressed: () => showBrandingLogin(ref),
         icon: const GlyphIcon(AppGlyphs.key, fill: 1),
         label: const Text(brandingLoginLabel),
       ),

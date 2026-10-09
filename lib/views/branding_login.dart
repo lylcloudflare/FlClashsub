@@ -2,7 +2,6 @@ import 'package:fl_clash/common/branding.dart';
 import 'package:fl_clash/common/branding_api.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/providers/providers.dart';
-import 'package:fl_clash/state.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -13,15 +12,15 @@ Future<void> setupBranding(WidgetRef ref) async {
   await addBrandingProfilesIfMissing(ref);
   if (!brandingLoginEnabled) return;
   if (ref.read(profilesProvider).isNotEmpty) return;
-  await showBrandingLogin();
+  await showBrandingLogin(ref);
 }
 
-Future<void> showBrandingLogin() async {
+Future<void> showBrandingLogin(WidgetRef ref) async {
+  final action = ref.read(profilesActionProvider.notifier);
   final account = await dialogs.showCommonDialog<BrandingAccount>(
     child: const BrandingLoginDialog(),
   );
   if (account == null) return;
-  final action = globalState.container.read(profilesActionProvider.notifier);
   await action.addProfileFormURL(account.subscriptionUrl);
 }
 

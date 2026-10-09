@@ -33,7 +33,7 @@ class ProfilesCard extends ConsumerWidget {
     if (profile != null) {
       onTap = () => showProfileDetailSheet(context);
     } else if (brandingLoginEnabled) {
-      onTap = showBrandingLogin;
+      onTap = () => showBrandingLogin(ref);
     } else {
       onTap = null;
     }
