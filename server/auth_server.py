@@ -491,7 +491,9 @@ def cmd_invite_create(cfg, args):
     db = open_db(cfg["db_path"])
     expires_at = int(time.time() + args.valid_days * 86400) if args.valid_days else 0
     for _ in range(args.count):
-        raw = "".join(secrets.choice(INVITE_ALPHABET) for _ in range(10))
+        raw = normalize_invite(args.code) if args.code else "".join(
+            secrets.choice(INVITE_ALPHABET) for _ in range(10)
+        )
         db.execute(
             "INSERT INTO invites VALUES(?,?,?,?,?,?,?)",
             (raw, args.uses, args.gb, args.days, expires_at, args.note,
@@ -559,6 +561,7 @@ def build_parser():
     c.add_argument("--days", type=int, default=30)
     c.add_argument("--valid-days", type=int, default=0)
     c.add_argument("--note", default="")
+    c.add_argument("--code", default="", help="custom invite code (with --count 1)")
     c.set_defaults(func=cmd_invite_create)
     sub.add_parser("invite-list").set_defaults(func=cmd_invite_list)
     d = sub.add_parser("invite-del")
