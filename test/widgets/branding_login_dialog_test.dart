@@ -30,10 +30,7 @@ FakeHttpAdapter _adapter({
   Future<void>? gate,
 }) {
   final body = reply ?? _okReply;
-  return FakeHttpAdapter(
-    (_) => jsonResponse(body, status: status),
-    gate: gate,
-  );
+  return FakeHttpAdapter((_) => jsonResponse(body, status: status), gate: gate);
 }
 
 Future<_Outcome> _open(WidgetTester tester, FakeHttpAdapter adapter) async {
