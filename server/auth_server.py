@@ -303,18 +303,21 @@ class Service:
             raise ApiError(429, "too_many_attempts", "Try again later.")
         with self.db_lock:
             row = self.db.execute(
-                "SELECT pw_hash FROM accounts WHERE username=?", (username,)
+                "SELECT username, pw_hash FROM accounts "
+                "WHERE username=? COLLATE NOCASE",
+                (username,),
             ).fetchone()
-        ok = verify_password(password, row[0] if row else DUMMY_HASH)
+        ok = verify_password(password, row[1] if row else DUMMY_HASH)
         if not row or not ok:
             self.user_limiter.hit(key)
             raise ApiError(401, "bad_credentials", "Wrong account or password.")
         self.user_limiter.clear(key)
+        return row[0]
 
     def login(self, body):
         username = str(body.get("username", ""))
-        self._check_credentials(username, str(body.get("password", "")))
-        return self._info(username)
+        name = self._check_credentials(username, str(body.get("password", "")))
+        return self._info(name)
 
     def register(self, body):
         username = str(body.get("username", ""))
@@ -324,6 +327,7 @@ class Service:
             raise ApiError(
                 400, "bad_username", "Use 3-24 letters, digits or underscore."
             )
+        username = username.lower()
         if not 8 <= len(password) <= 64:
             raise ApiError(400, "bad_password", "Password must be 8-64 characters.")
         with self.db_lock:
@@ -332,7 +336,8 @@ class Service:
     def _register_locked(self, username, password, invite):
         taken = ApiError(409, "username_taken", "That account name is taken.")
         if self.db.execute(
-            "SELECT 1 FROM accounts WHERE username=?", (username,)
+            "SELECT 1 FROM accounts WHERE username=? COLLATE NOCASE",
+            (username,),
         ).fetchone():
             raise taken
         try:
@@ -379,11 +384,11 @@ class Service:
         new = str(body.get("new_password", ""))
         if not 8 <= len(new) <= 64:
             raise ApiError(400, "bad_password", "Password must be 8-64 characters.")
-        self._check_credentials(username, str(body.get("password", "")))
+        name = self._check_credentials(username, str(body.get("password", "")))
         with self.db_lock:
             self.db.execute(
                 "UPDATE accounts SET pw_hash=? WHERE username=?",
-                (hash_password(new), username),
+                (hash_password(new), name),
             )
             self.db.commit()
         return {"ok": True}
@@ -555,7 +560,7 @@ def cmd_user_passwd(cfg, args):
     if not 8 <= len(password) <= 64:
         sys.exit("Password must be 8-64 characters.")
     cur = db.execute(
-        "UPDATE accounts SET pw_hash=? WHERE username=?",
+        "UPDATE accounts SET pw_hash=? WHERE username=? COLLATE NOCASE",
         (hash_password(password), args.username),
     )
     db.commit()
@@ -565,10 +570,15 @@ def cmd_user_passwd(cfg, args):
 
 def cmd_user_del(cfg, args):
     db = open_db(cfg["db_path"])
-    db.execute("DELETE FROM accounts WHERE username=?", (args.username,))
+    row = db.execute(
+        "SELECT username FROM accounts WHERE username=? COLLATE NOCASE",
+        (args.username,),
+    ).fetchone()
+    name = row[0] if row else args.username
+    db.execute("DELETE FROM accounts WHERE username=?", (name,))
     db.commit()
     if args.marzban:
-        Marzban(cfg).delete_user(args.username)
+        Marzban(cfg).delete_user(name)
 
 
 def build_parser():

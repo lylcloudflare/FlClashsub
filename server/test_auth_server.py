@@ -243,6 +243,45 @@ class AuthServerTest(unittest.TestCase):
             ["shadowsocks", "trojan", "vless", "vmess"],
         )
 
+    def test_usernames_ignore_case(self):
+        self.assertEqual(self.register(self.invite(), name="Alice")[0], 200)
+        self.assertEqual(self.fake.created[0]["username"], "alice")
+        for name in ("alice", "ALICE", "Alice"):
+            status, res = self.post(
+                "/api/login", {"username": name, "password": "password123"}
+            )
+            self.assertEqual((status, res["username"]), (200, "alice"))
+
+    def test_same_name_in_another_case_is_taken(self):
+        self.register(self.invite(), name="alice")
+        status, res = self.register(self.invite(), name="ALICE")
+        self.assertEqual((status, res["error"]), (409, "username_taken"))
+
+    def test_legacy_mixed_case_account_still_logs_in(self):
+        self.service.db.execute(
+            "INSERT INTO accounts VALUES(?,?,?)",
+            ("Legacy", auth_server.hash_password("password123"), 0),
+        )
+        self.service.db.commit()
+        self.fake.users["Legacy"] = {
+            "subscription_url": "/sub/LEGACY",
+            "status": "active",
+        }
+        status, res = self.post(
+            "/api/login", {"username": "legacy", "password": "password123"}
+        )
+        self.assertEqual((status, res["username"]), (200, "Legacy"))
+        status, _ = self.post(
+            "/api/password",
+            {"username": "LEGACY", "password": "password123",
+             "new_password": "newpassword9"},
+        )
+        self.assertEqual(status, 200)
+        status, _ = self.post(
+            "/api/login", {"username": "Legacy", "password": "newpassword9"}
+        )
+        self.assertEqual(status, 200)
+
     def test_validation(self):
         code = self.invite()
         self.assertEqual(self.register(code, name="a b")[1]["error"], "bad_username")

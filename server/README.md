@@ -108,6 +108,8 @@ chmod +x /usr/local/bin/flauth
 
 邀请码长这样：`QWFHQ-ETM9J`，输入时不区分大小写，横线可有可无。
 
+账号名也不区分大小写：注册时统一存成小写，`Alice` 和 `alice` 是同一个账号。
+
 注册时服务会在 Marzban 里自动建同名用户（默认开通 vless、trojan、vmess、shadowsocks），流量和天数取自邀请码。续期、加流量仍然在 Marzban 面板里改。
 
 ## 五、可选配置
