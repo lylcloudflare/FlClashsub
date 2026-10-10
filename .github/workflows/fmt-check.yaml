@@ -1,0 +1,58 @@
+name: fmt-check
+
+on:
+  push:
+    branches:
+      - 'tmp/fmt-**'
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.4'
+          cache: true
+      - name: Checks
+        run: |
+          set +e
+          run() { n=$1; shift; "$@" > "/tmp/out_$n.txt" 2>&1; echo "exit=$?" >> "/tmp/out_$n.txt"; }
+          run pub flutter pub get
+          run fmt dart format lib test tool plugins setup.dart
+          git --no-pager diff --no-color -- lib test > /tmp/out_diff.txt
+          run analyze flutter analyze --no-fatal-infos
+          yq -i '.hooks.user_defines.setup.build_assets = false' pubspec.yaml
+          run test flutter test --reporter expanded test/common/branding_api_test.dart test/common/branding_account_test.dart test/widgets/branding_login_dialog_test.dart test/lint test/l10n
+          cat > /tmp/report.py <<'PY'
+          import os, re, sys
+          noise = re.compile(r"^(\s+\S+ \S+ \(.*(available|discontinued)\)|Resolving dependencies.*|Downloading packages.*|Got dependencies!|\d+ packages? .*|Try `flutter pub outdated`.*|.*is discontinued.*)$")
+          prog = re.compile(r"^\d\d:\d\d \+\d+( -\d+)?( ~\d+)?: ")
+          name = sys.argv[1]
+          p = f"/tmp/out_{name}.txt"
+          lines = open(p, errors="replace").read().splitlines() if os.path.exists(p) else ["(missing)"]
+          lines = [l for l in lines if not noise.match(l)]
+          if name == "test":
+              last = [l for l in lines if prog.match(l)][-1:]
+              lines = [l for l in lines if not prog.match(l) or "[E]" in l] + last
+          text = "\n".join(lines) or "(empty)"
+          chunks = [text[i:i + 2500] for i in range(0, len(text), 2500)]
+          for i, c in enumerate(chunks[:9]):
+              c = c.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::notice title={name}-{i + 1}/{len(chunks)}::{c}")
+          PY
+      - name: Report fmt
+        if: always()
+        run: python3 /tmp/report.py fmt
+      - name: Report diff
+        if: always()
+        run: python3 /tmp/report.py diff
+      - name: Report analyze
+        if: always()
+        run: python3 /tmp/report.py analyze
+      - name: Report test
+        if: always()
+        run: python3 /tmp/report.py test
