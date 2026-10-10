@@ -20,6 +20,9 @@ class FakeMarzban:
         self.created = []
         self.fail_create = False
         self.forbidden = set()
+        self.inbounds = {"vless": [{}], "trojan": [{}], "vmess": [{}],
+                         "shadowsocks": [{}]}
+        self.inbounds_status = 200
         self.token_calls = 0
         outer = self
 
@@ -46,6 +49,13 @@ class FakeMarzban:
                     if outer.fail_create:
                         return self._json(500, {"detail": "boom"})
                     data = json.loads(body)
+                    for proto in data["proxies"]:
+                        if not outer.inbounds.get(proto):
+                            return self._json(
+                                400,
+                                {"detail": f"Protocol {proto} is disabled "
+                                           "on your server"},
+                            )
                     outer.created.append(data)
                     outer.users[data["username"]] = {
                         "subscription_url": "/sub/TOKEN_" + data["username"],
@@ -60,6 +70,10 @@ class FakeMarzban:
             def do_GET(self):
                 if self.headers.get("Authorization") != "Bearer tok":
                     return self._json(401, {"detail": "no"})
+                if self.path == "/api/inbounds":
+                    if outer.inbounds_status != 200:
+                        return self._json(outer.inbounds_status, {})
+                    return self._json(200, outer.inbounds)
                 name = self.path.rsplit("/", 1)[-1]
                 if name in outer.forbidden:
                     return self._json(403, {"detail": "not yours"})
@@ -198,6 +212,36 @@ class AuthServerTest(unittest.TestCase):
         )
         self.assertEqual((status, res["error"]), (502, "upstream_error"))
         self.fake = FakeMarzban()
+
+    def test_only_protocols_with_an_inbound_are_enabled(self):
+        self.fake.inbounds = {"vless": [{}], "shadowsocks": [{}]}
+        status, _ = self.register(self.invite())
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            sorted(self.fake.created[0]["proxies"]), ["shadowsocks", "vless"]
+        )
+
+    def test_empty_inbound_list_counts_as_disabled(self):
+        self.fake.inbounds = {"vless": [{}], "trojan": []}
+        self.register(self.invite())
+        self.assertEqual(list(self.fake.created[0]["proxies"]), ["vless"])
+
+    def test_no_usable_protocol_fails_and_keeps_invite(self):
+        self.fake.inbounds = {}
+        code = self.invite(uses=1)
+        status, res = self.register(code)
+        self.assertEqual((status, res["error"]), (502, "upstream_error"))
+        self.fake.inbounds = {"vless": [{}]}
+        self.assertEqual(self.register(code)[0], 200)
+
+    def test_inbounds_lookup_failure_falls_back_to_config(self):
+        self.fake.inbounds_status = 404
+        status, _ = self.register(self.invite())
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            sorted(self.fake.created[0]["proxies"]),
+            ["shadowsocks", "trojan", "vless", "vmess"],
+        )
 
     def test_validation(self):
         code = self.invite()

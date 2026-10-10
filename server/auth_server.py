@@ -213,9 +213,27 @@ class Marzban:
                 return None
             raise
 
+    def enabled_protocols(self):
+        wanted = self.cfg["proxies"]
+        try:
+            available = self._call("GET", "/api/inbounds")
+        except MarzbanError as e:
+            sys.stderr.write(f"inbounds lookup failed, using config: {e}\n")
+            return wanted
+        if not isinstance(available, dict):
+            return wanted
+        usable = [n for n in wanted if available.get(n)]
+        skipped = [n for n in wanted if n not in usable]
+        if skipped:
+            sys.stderr.write(f"no inbound on the panel for: {skipped}\n")
+        return usable
+
     def create_user(self, username, data_limit_gb, expire_days, note=""):
+        names = self.enabled_protocols()
+        if not names:
+            raise MarzbanError(400, "no usable protocol has an inbound")
         proxies = {}
-        for name in self.cfg["proxies"]:
+        for name in names:
             if name == "vless" and self.cfg["vless_flow"]:
                 proxies[name] = {"flow": self.cfg["vless_flow"]}
             else:
@@ -346,6 +364,7 @@ class Service:
             self.db.commit()
         except Exception as e:
             self.db.rollback()
+            sys.stderr.write(f"register failed for {username}: {e}\n")
             try:
                 self.marzban.delete_user(username)
             except MarzbanError:

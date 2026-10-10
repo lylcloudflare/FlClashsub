@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/lylcloudflare/FlClashsub/main/serve
 
 ```bash
 cat > /etc/flclash-auth.env <<'EOF'
-MARZBAN_URL=https://127.0.0.1:8000
+MARZBAN_URL=https://localhost:8000
 MARZBAN_INSECURE=1
 MARZBAN_ADMIN_USER=authsvc
 MARZBAN_ADMIN_PASS=这里填刚才设置的密码
@@ -42,7 +42,7 @@ EOF
 chmod 600 /etc/flclash-auth.env
 ```
 
-说明：`MARZBAN_INSECURE=1` 只用于本机 127.0.0.1 之间的连接（证书是按域名签的，用 IP 访问会不匹配），不影响对外的 HTTPS。
+说明：`MARZBAN_INSECURE=1` 只用于本机之间的连接（证书是按域名签的，用 localhost 访问会不匹配），不影响对外的 HTTPS。写 `localhost` 而不是 `127.0.0.1`，是因为面板可能只监听 IPv6，`localhost` 会自动两种都试。
 
 ## 三、开机自启
 
@@ -116,10 +116,30 @@ chmod +x /usr/local/bin/flauth
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `MARZBAN_PROXIES` | `vless,trojan,vmess,shadowsocks` | 新用户开通哪些协议，要和 Core 配置里的入站对应 |
+| `MARZBAN_PROXIES` | `vless,trojan,vmess,shadowsocks` | 想给新用户开通哪些协议。服务会先问面板哪些协议真有入站，只开通有的；面板上没有的会自动跳过，并在日志里提示 |
 | `MARZBAN_VLESS_FLOW` | `xtls-rprx-vision` | VLESS Reality 的 flow，留空则不设置 |
 | `AUTH_HOST` | `::` | 监听地址，服务器不支持 IPv6 时自动改用 IPv4 |
 | `AUTH_DB` | `/opt/flclash-auth/data.db` | 数据文件位置，备份这一个文件即可 |
+
+## 出问题时怎么查
+
+先看日志，里面有面板返回的真实原因：
+
+```bash
+journalctl -u flclash-auth -n 40 --no-pager
+```
+
+再对照 App 里弹出的提示：
+
+| App 提示 | 说明 | 怎么查 |
+|---|---|---|
+| 无法连接服务器，请检查网络后重试 | App 连不到登录服务本身 | 在电脑上执行 `curl https://你的域名:9000/healthz`，要返回 `{"ok": true}`。不通就查：服务是否在运行（`systemctl status flclash-auth`）、`ufw` 和 CloudCone 控制台是否放行 9000、域名是否有 A 记录（没有 IPv6 的用户需要）、Cloudflare 是否开了橙色云朵（要关） |
+| 服务暂时不可用，请稍后再试 | 登录服务连不上 Marzban，或 Marzban 拒绝了请求 | 看上面的日志。常见原因：管理员账号或密码写错、`MARZBAN_URL` 不对、面板里没有任何可用协议的入站 |
+| 登录失败，请稍后再试 | 服务返回的内容 App 看不懂 | 多半是 `BRANDING_API_BASE` 填的地址不是登录服务（比如指到了面板的 8000 端口，或被网关返回了网页） |
+| 账号或密码错误 / 邀请码无效、已用完或已过期 | 正常的业务提示 | 检查输入；`flauth invite-list` 看邀请码 |
+| 输错次数太多，请 15 分钟后再试 | 同一账号连续输错 5 次被锁定 | 等 15 分钟，或 `flauth user-passwd 账号` 重置密码 |
+
+App 里**完全没有登录入口**：说明打包时没有配 `BRANDING_API_BASE`，或者装的是配置之前打出来的旧包；另外只有在 App 里还没有任何订阅时才会弹出，已有订阅的话要先删掉。
 
 ## 接口（给 App 用）
 
