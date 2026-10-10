@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_clash/common/branding_api.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/state.dart';
@@ -22,9 +24,16 @@ const _okReply = <String, Object?>{
   'subscription_url': _subscription,
 };
 
-FakeHttpAdapter _adapter({Map<String, Object?>? reply, int status = 200}) {
+FakeHttpAdapter _adapter({
+  Map<String, Object?>? reply,
+  int status = 200,
+  Future<void>? gate,
+}) {
   final body = reply ?? _okReply;
-  return FakeHttpAdapter((_) => jsonResponse(body, status: status));
+  return FakeHttpAdapter(
+    (_) => jsonResponse(body, status: status),
+    gate: gate,
+  );
 }
 
 Future<_Outcome> _open(WidgetTester tester, FakeHttpAdapter adapter) async {
@@ -78,12 +87,24 @@ Future<void> _type(WidgetTester tester, int field, String text) async {
   await tester.pump();
 }
 
-Future<void> _submit(WidgetTester tester) async {
-  await tester.tap(find.text('Submit'));
+Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 5; i++) {
     await tester.pump(const Duration(milliseconds: 100));
   }
   await tester.pumpAndSettle();
+}
+
+Future<void> _submit(WidgetTester tester) async {
+  await tester.tap(find.text('Submit'));
+  await _settle(tester);
+}
+
+bool _obscured(WidgetTester tester, int field) {
+  final editable = find.descendant(
+    of: find.byType(TextFormField).at(field),
+    matching: find.byType(EditableText),
+  );
+  return tester.widget<EditableText>(editable).obscureText;
 }
 
 void main() {
@@ -142,7 +163,7 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 
-  testWidgets('register asks for an invite code and checks the password', (
+  testWidgets('register asks for an invite code and a matching password', (
     tester,
   ) async {
     final adapter = _adapter();
@@ -150,16 +171,22 @@ void main() {
 
     await tester.tap(find.text('没有账号？用邀请码注册'));
     await tester.pump();
-    expect(find.byType(TextFormField), findsNWidgets(3));
+    expect(find.byType(TextFormField), findsNWidgets(4));
 
     await _type(tester, 0, 'alice');
     await _type(tester, 1, 'short');
-    await _type(tester, 2, 'ABCDE-FGHJK');
+    await _type(tester, 2, 'short');
+    await _type(tester, 3, 'ABCDE-FGHJK');
     await _submit(tester);
     expect(find.text('密码需为 8-64 位'), findsOneWidget);
     expect(adapter.requests, isEmpty);
 
     await _type(tester, 1, 'long-enough-pass');
+    await _submit(tester);
+    expect(find.text('两次输入的密码不一致'), findsOneWidget);
+    expect(adapter.requests, isEmpty);
+
+    await _type(tester, 2, 'long-enough-pass');
     await _submit(tester);
 
     expect(outcome.closed, isTrue);
@@ -170,6 +197,66 @@ void main() {
       'invite': 'ABCDE-FGHJK',
     };
     expect(adapter.requests.single.data, expected);
+  });
+
+  testWidgets('the forgot-password hint shows on login only', (tester) async {
+    await _open(tester, _adapter());
+    expect(find.text('忘记密码请联系管理员'), findsOneWidget);
+
+    await tester.tap(find.text('没有账号？用邀请码注册'));
+    await tester.pump();
+
+    expect(find.text('忘记密码请联系管理员'), findsNothing);
+  });
+
+  testWidgets('the eye button shows and hides the password', (tester) async {
+    await _open(tester, _adapter());
+    expect(_obscured(tester, 1), isTrue);
+
+    await tester.tap(find.byTooltip('显示密码'));
+    await tester.pump();
+    expect(_obscured(tester, 1), isFalse);
+
+    await tester.tap(find.byTooltip('隐藏密码'));
+    await tester.pump();
+    expect(_obscured(tester, 1), isTrue);
+  });
+
+  testWidgets('pressing done on the password field logs in', (tester) async {
+    final adapter = _adapter();
+    final outcome = await _open(tester, adapter);
+
+    await _type(tester, 0, 'alice');
+    await _type(tester, 1, 'secret-pass');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await _settle(tester);
+
+    expect(outcome.closed, isTrue);
+    expect(adapter.requests.single.uri.path, '/api/login');
+  });
+
+  testWidgets('the dialog stays open while a request is running', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final outcome = await _open(tester, _adapter(gate: gate.future));
+
+    await _type(tester, 0, 'alice');
+    await _type(tester, 1, 'secret-pass');
+    await tester.tap(find.text('Submit'));
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byType(BrandingLoginDialog), findsOneWidget);
+    expect(outcome.closed, isFalse);
+
+    gate.complete();
+    await _settle(tester);
+
+    expect(outcome.closed, isTrue);
+    expect(outcome.account?.username, 'alice');
   });
 
   testWidgets('cancel closes the dialog without an account', (tester) async {

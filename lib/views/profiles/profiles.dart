@@ -99,6 +99,13 @@ class _ProfilesViewState extends ConsumerState<ProfilesView> {
         return CommonScaffold(
           isLoading: isLoading,
           title: appLocalizations.profiles,
+          primaryAction: brandingLoginEnabled && state.profiles.isNotEmpty
+              ? IconButtonData(
+                  glyph: AppGlyphs.key,
+                  onPressed: () => showBrandingLogin(ref),
+                  tooltip: brandingSwitchLabel,
+                )
+              : null,
           iconActions: _buildActions(state.profiles),
           foldPrimaryAction: true,
           body: NullStatusSwitcher(

@@ -146,7 +146,7 @@ class ProfilesAction extends _$ProfilesAction {
     }
   }
 
-  Future<void> addProfileFormURL(String url, {String? label}) async {
+  Future<Profile?> addProfileFormURL(String url, {String? label}) async {
     if (globalState.navigatorKey.currentState?.canPop() ?? false) {
       globalState.navigatorKey.currentState?.popUntil((route) => route.isFirst);
     }
@@ -164,6 +164,7 @@ class ProfilesAction extends _$ProfilesAction {
     if (profile != null) {
       putProfile(profile);
     }
+    return profile;
   }
 
   void setProfileAndAutoApply(Profile profile) {

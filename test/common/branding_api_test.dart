@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:fl_clash/common/branding_api.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -96,7 +98,7 @@ void main() {
 
       final error = await _failure(_api(adapter).login('alice', 'x'));
 
-      expect(error.code, 'unknown');
+      expect(error.code, 'bad_response');
     });
 
     test('a subscription that is not a web address is rejected', () async {
@@ -106,8 +108,86 @@ void main() {
 
       final error = await _failure(_api(adapter).login('alice', 'x'));
 
-      expect(error.code, 'unknown');
+      expect(error.code, 'bad_response');
     });
+
+    test('the account status is kept and explained when not active', () async {
+      final adapter = FakeHttpAdapter(
+        (_) => jsonResponse({..._ok(), 'status': 'expired'}),
+      );
+
+      final account = await _api(adapter).login('alice', 'x');
+
+      expect(account.status, 'expired');
+      expect(account.notice, '账号已到期，请联系管理员续期');
+    });
+
+    test('an active or missing status needs no notice', () async {
+      final active = FakeHttpAdapter(
+        (_) => jsonResponse({..._ok(), 'status': 'active'}),
+      );
+      final missing = FakeHttpAdapter((_) => jsonResponse(_ok()));
+
+      expect((await _api(active).login('a', 'x')).notice, isNull);
+      expect((await _api(missing).login('a', 'x')).notice, isNull);
+    });
+
+    test('limited and disabled accounts each get their own notice', () {
+      const limited = BrandingAccount(
+        username: 'a',
+        subscriptionUrl: _subscription,
+        status: 'limited',
+      );
+      const disabled = BrandingAccount(
+        username: 'a',
+        subscriptionUrl: _subscription,
+        status: 'disabled',
+      );
+
+      expect(limited.notice, '流量已用完，请联系管理员');
+      expect(disabled.notice, '账号已被停用，请联系管理员');
+    });
+
+    test('a certificate failure is reported as a tls error', () async {
+      final adapter = FakeHttpAdapter((options) {
+        throw DioException(
+          requestOptions: options,
+          error: const HandshakeException('CERTIFICATE_VERIFY_FAILED'),
+        );
+      });
+
+      final error = await _failure(_api(adapter).login('alice', 'x'));
+
+      expect(error.code, 'tls');
+      expect(error.message, '服务器证书无效或已过期，请联系管理员');
+    });
+
+    test('a rejected certificate is reported as a tls error', () async {
+      final adapter = FakeHttpAdapter((options) {
+        throw DioException.badCertificate(requestOptions: options);
+      });
+
+      final error = await _failure(_api(adapter).login('alice', 'x'));
+
+      expect(error.code, 'tls');
+    });
+
+    for (final type in [
+      DioExceptionType.connectionTimeout,
+      DioExceptionType.sendTimeout,
+      DioExceptionType.receiveTimeout,
+    ]) {
+      test('a $type is reported as a timeout', () async {
+        final adapter = FakeHttpAdapter((options) {
+          throw DioException(requestOptions: options, type: type);
+        });
+
+        final error = await _failure(_api(adapter).login('alice', 'x'));
+
+        expect(error.code, 'timeout');
+        expect(error.message, '连接服务器超时，请稍后再试');
+      });
+    }
 
     test('a connection failure is reported as a network error', () async {
       final adapter = FakeHttpAdapter((options) {

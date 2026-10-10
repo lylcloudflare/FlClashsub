@@ -4,9 +4,10 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 
 class FakeHttpAdapter implements HttpClientAdapter {
-  FakeHttpAdapter(this.respond);
+  FakeHttpAdapter(this.respond, {this.gate});
 
   final ResponseBody Function(RequestOptions options) respond;
+  final Future<void>? gate;
   final requests = <RequestOptions>[];
 
   @override
@@ -16,6 +17,7 @@ class FakeHttpAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requests.add(options);
+    await gate;
     return respond(options);
   }
 
