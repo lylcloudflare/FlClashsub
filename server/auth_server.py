@@ -4,9 +4,11 @@
 Standard library only. Run `python3 auth_server.py --help` for the commands.
 """
 import argparse
+import contextlib
 import getpass
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -587,10 +589,130 @@ def cmd_user_del(cfg, args):
         Marzban(cfg).delete_user(name)
 
 
+INVITE_PRESETS = {
+    "1": {"gb": 2, "days": 3, "valid_days": 14},
+    "2": {"gb": 100, "days": 30, "valid_days": 0},
+}
+
+
+def ask(label, default, cast=str, ok=lambda value: True):
+    hint = f"（直接回车={default}）" if default != "" else "（可留空）"
+    while True:
+        raw = input(f"{label}{hint}：").strip()
+        if not raw:
+            return default
+        try:
+            value = cast(raw)
+        except ValueError:
+            value = None
+        if value is not None and ok(value):
+            return value
+        print("输入不对，请重试。")
+
+
+def confirm(question):
+    return input(f"{question}（输入 y 确认）：").strip().lower() == "y"
+
+
+def show(fn, cfg, empty):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        fn(cfg, None)
+    print(buf.getvalue().rstrip() or empty)
+
+
+def menu_invite_create(cfg):
+    print("1) 试用码  2GB / 3天，邀请码 14 天内有效")
+    print("2) 正式码  100GB / 30天")
+    print("3) 自定义")
+    choice = input("选哪种（直接回车=1）：").strip() or "1"
+    uses = 1
+    if choice in INVITE_PRESETS:
+        opts = dict(INVITE_PRESETS[choice])
+    elif choice == "3":
+        opts = {
+            "gb": ask("流量 GB", 50, float, lambda v: v > 0),
+            "days": ask("账号有效天数", 30, int, lambda v: v > 0),
+            "valid_days": ask("邀请码几天内有效，0=一直有效", 0, int, lambda v: v >= 0),
+        }
+        uses = ask("每个邀请码可注册几人", 1, int, lambda v: v >= 1)
+    else:
+        print("没有这个选项。")
+        return
+    count = ask("生成几个", 1, int, lambda v: 1 <= v <= 200)
+    note = ask("备注，例如给谁", "")
+    print("生成结果，一人发一个：")
+    cmd_invite_create(
+        cfg,
+        argparse.Namespace(count=count, uses=uses, code="", note=note, **opts),
+    )
+
+
+def menu_invite_del(cfg):
+    code = ask("要作废的邀请码", "")
+    if code:
+        cmd_invite_del(cfg, argparse.Namespace(code=code))
+        print("已作废。")
+
+
+def menu_user_passwd(cfg):
+    name = ask("要重置密码的账号", "")
+    if name:
+        cmd_user_passwd(cfg, argparse.Namespace(username=name, password=None))
+        print("密码已重置。")
+
+
+def menu_user_del(cfg):
+    name = ask("要删除的账号", "")
+    if not name or not confirm(f"确定删除 {name}，并同时删除面板里的用户"):
+        return
+    cmd_user_del(cfg, argparse.Namespace(username=name, marzban=True))
+    print("已删除。")
+
+
+MENU = (
+    ("1", "生成邀请码", menu_invite_create),
+    ("2", "查看邀请码", lambda cfg: show(cmd_invite_list, cfg, "（还没有邀请码）")),
+    ("3", "作废邀请码", menu_invite_del),
+    ("4", "查看已注册账号", lambda cfg: show(cmd_user_list, cfg, "（还没有账号）")),
+    ("5", "重置账号密码", menu_user_passwd),
+    ("6", "删除账号", menu_user_del),
+)
+
+
+def cmd_menu(cfg, args):
+    while True:
+        print("\n===== 账号管理 =====")
+        for key, title, _ in MENU:
+            print(f"{key}) {title}")
+        print("0) 退出")
+        try:
+            choice = input("请输入数字：").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if choice == "0":
+            return
+        action = next((fn for key, _, fn in MENU if key == choice), None)
+        if action is None:
+            print("没有这个选项。")
+            continue
+        try:
+            action(cfg)
+        except SystemExit as e:
+            if e.code:
+                print(e.code)
+        except (EOFError, KeyboardInterrupt):
+            print()
+        except (sqlite3.Error, MarzbanError) as e:
+            print(f"操作失败：{e}")
+
+
 def build_parser():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("serve").set_defaults(func=cmd_serve)
+    sub.add_parser("menu").set_defaults(func=cmd_menu)
     c = sub.add_parser("invite-create")
     c.add_argument("--count", type=int, default=1)
     c.add_argument("--uses", type=int, default=1)
@@ -617,7 +739,8 @@ def build_parser():
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else argv
+    args = build_parser().parse_args(argv or ["menu"])
     args.func(load_config(), args)
 
 

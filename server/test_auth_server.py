@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 import contextlib
 import io
+import re
 import sqlite3
 from unittest import mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -407,6 +408,49 @@ class AuthServerTest(unittest.TestCase):
         for line in printed:
             self.assertRegex(line, r"^[A-Z2-9]{5}-[A-Z2-9]{5}$")
             
+    def menu(self, *answers):
+        out = io.StringIO()
+        env = {
+            "AUTH_DB": self.cfg["db_path"],
+            "MARZBAN_URL": self.fake.url,
+            "MARZBAN_ADMIN_USER": "admin",
+            "MARZBAN_ADMIN_PASS": "pw",
+        }
+        with mock.patch.dict(os.environ, env), \
+                mock.patch("builtins.input", side_effect=list(answers) + ["0"]), \
+                contextlib.redirect_stdout(out):
+            auth_server.main([])
+        return out.getvalue()
+
+    def test_menu_trial_invites_are_single_use_and_small(self):
+        shown = self.menu("1", "1", "3", "给小王")
+        codes = [l for l in shown.splitlines() if re.fullmatch(r"[A-Z2-9]{5}-[A-Z2-9]{5}", l)]
+        self.assertEqual(len(codes), 3)
+        self.assertEqual(self.register(codes[0])[0], 200)
+        self.assertEqual(self.fake.created[0]["data_limit"], 2 * 1024**3)
+        status, res = self.register(codes[0], name="bob")
+        self.assertEqual((status, res["error"]), (403, "invalid_invite"))
+        self.assertIn("给小王", self.cli("invite-list"))
+
+    def test_menu_custom_invite_rejects_bad_numbers_then_retries(self):
+        shown = self.menu("1", "3", "abc", "5", "0", "7", "0", "2", "1", "")
+        self.assertIn("输入不对，请重试。", shown)
+        self.assertRegex(self.cli("invite-list"), r"2 left\s+5\.0GB\s+7d")
+
+    def test_menu_lists_and_survives_errors(self):
+        shown = self.menu("2", "4", "9", "5", "nobody", "")
+        self.assertIn("（还没有邀请码）", shown)
+        self.assertIn("（还没有账号）", shown)
+        self.assertIn("没有这个选项。", shown)
+
+    def test_menu_delete_account_needs_confirmation(self):
+        self.register(self.invite())
+        self.menu("6", "alice", "n")
+        self.assertIn("alice", self.cli("user-list"))
+        self.menu("6", "alice", "y")
+        self.assertNotIn("alice", self.cli("user-list"))
+        self.assertEqual(self.fake.deleted, ["alice"])
+
     def test_password_hash_roundtrip(self):
         stored = auth_server.hash_password("hello-world")
         self.assertTrue(auth_server.verify_password("hello-world", stored))
