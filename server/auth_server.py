@@ -335,6 +335,13 @@ class Service:
 
     def _register_locked(self, username, password, invite):
         taken = ApiError(409, "username_taken", "That account name is taken.")
+        row = self.db.execute(
+            "SELECT data_limit_gb, expire_days, note FROM invites "
+            "WHERE code=? AND uses_left>0 AND (expires_at=0 OR expires_at>?)",
+            (invite, int(time.time())),
+        ).fetchone()
+        if not row:
+            raise ApiError(403, "invalid_invite", "Invite code is not valid.")
         if self.db.execute(
             "SELECT 1 FROM accounts WHERE username=? COLLATE NOCASE",
             (username,),
@@ -348,13 +355,6 @@ class Service:
             raise
         if exists:
             raise taken
-        row = self.db.execute(
-            "SELECT data_limit_gb, expire_days, note FROM invites "
-            "WHERE code=? AND uses_left>0 AND (expires_at=0 OR expires_at>?)",
-            (invite, int(time.time())),
-        ).fetchone()
-        if not row:
-            raise ApiError(403, "invalid_invite", "Invite code is not valid.")
         limit_gb, expire_days, note = row
         self.db.execute(
             "UPDATE invites SET uses_left=uses_left-1 WHERE code=?", (invite,)
@@ -370,11 +370,17 @@ class Service:
         except Exception as e:
             self.db.rollback()
             sys.stderr.write(f"register failed for {username}: {e}\n")
-            try:
-                self.marzban.delete_user(username)
-            except MarzbanError:
-                pass
+            # A 4xx means the panel refused to create the user, so one with
+            # this name belongs to someone else and must not be deleted.
+            rejected = isinstance(e, MarzbanError) and 400 <= e.status < 500
+            if not rejected:
+                try:
+                    self.marzban.delete_user(username)
+                except MarzbanError:
+                    pass
             if isinstance(e, MarzbanError):
+                if e.status == 409:
+                    raise taken
                 raise ApiError(502, "upstream_error", "Panel is unavailable.")
             raise
         return self._info(username)

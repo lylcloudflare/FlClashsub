@@ -20,6 +20,8 @@ class FakeMarzban:
         self.created = []
         self.fail_create = False
         self.forbidden = set()
+        self.conflict = set()
+        self.deleted = []
         self.inbounds = {"vless": [{}], "trojan": [{}], "vmess": [{}],
                          "shadowsocks": [{}]}
         self.inbounds_status = 200
@@ -49,6 +51,10 @@ class FakeMarzban:
                     if outer.fail_create:
                         return self._json(500, {"detail": "boom"})
                     data = json.loads(body)
+                    if data["username"] in outer.conflict:
+                        return self._json(
+                            409, {"detail": "User already exists"}
+                        )
                     for proto in data["proxies"]:
                         if not outer.inbounds.get(proto):
                             return self._json(
@@ -83,6 +89,7 @@ class FakeMarzban:
 
             def do_DELETE(self):
                 name = self.path.rsplit("/", 1)[-1]
+                outer.deleted.append(name)
                 outer.users.pop(name, None)
                 self._json(200, {})
 
@@ -204,6 +211,36 @@ class AuthServerTest(unittest.TestCase):
         status, res = self.register(self.invite(), name="theirs")
         self.assertEqual((status, res["error"]), (409, "username_taken"))
 
+    def test_invalid_invite_does_not_reveal_taken_names(self):
+        self.register(self.invite())
+        status, res = self.register("AAAAA-BBBBB")
+        self.assertEqual((status, res["error"]), (403, "invalid_invite"))
+
+    def test_create_conflict_is_taken_and_deletes_nothing(self):
+        self.fake.users["Alice"] = {"status": "active"}
+        self.fake.conflict = {"alice"}
+        code = self.invite(uses=1)
+        status, res = self.register(code)
+        self.assertEqual((status, res["error"]), (409, "username_taken"))
+        self.assertEqual(self.fake.deleted, [])
+        self.assertIn("Alice", self.fake.users)
+        self.assertEqual(self.register(code, name="bobby")[0], 200)
+
+    def test_server_error_on_create_still_cleans_up_the_panel_user(self):
+        self.fake.fail_create = True
+        self.assertEqual(self.register(self.invite())[0], 502)
+        self.assertEqual(self.fake.deleted, ["alice"])
+
+    def test_failure_after_create_removes_the_panel_user(self):
+        code = self.invite(uses=1)
+        with mock.patch.object(
+            auth_server, "hash_password", side_effect=RuntimeError("disk")
+        ):
+            status, res = self.register(code)
+        self.assertEqual((status, res["error"]), (500, "internal_error"))
+        self.assertEqual(self.fake.deleted, ["alice"])
+        self.assertEqual(self.register(code)[0], 200)
+
     def test_panel_down_gives_502_on_login(self):
         self.register(self.invite())
         self.fake.stop()
@@ -231,6 +268,7 @@ class AuthServerTest(unittest.TestCase):
         code = self.invite(uses=1)
         status, res = self.register(code)
         self.assertEqual((status, res["error"]), (502, "upstream_error"))
+        self.assertEqual(self.fake.deleted, [])
         self.fake.inbounds = {"vless": [{}]}
         self.assertEqual(self.register(code)[0], 200)
 
